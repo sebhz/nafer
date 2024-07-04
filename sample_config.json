@@ -1,0 +1,8 @@
+{
+  "feed_name1": {
+    "url": "my_feed_url"
+  },
+  "feed_name2": {
+    "url": "my_other_feed_url"
+  }
+}
