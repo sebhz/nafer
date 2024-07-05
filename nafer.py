@@ -6,6 +6,7 @@ import json
 import os
 import sys
 from urllib.error import URLError
+from xml.sax import SAXParseException
 import feedparser
 
 CONFIG_DEFAULT = os.path.join(f"{os.environ['HOME']}", ".nafer")
@@ -13,8 +14,11 @@ CONFIG_DEFAULT = os.path.join(f"{os.environ['HOME']}", ".nafer")
 
 def read_config(config_name):
     """Get JSON config dict"""
-    with open(config_name, encoding="utf-8") as f:
-        d = json.load(f)
+    try:
+        with open(config_name, encoding="utf-8") as f:
+            d = json.load(f)
+    except Exception:
+        d = None
     return d
 
 
@@ -51,12 +55,11 @@ def handle_feed(feed_name, cfg):
     for option in options_checked:
         if f_cfg.get(option) is not None:
             kwargs[option] = f_cfg.get(option)
-    if kwargs:
-        d = feedparser.parse(f_cfg["url"], **kwargs)
-    else:
-        d = feedparser.parse(f_cfg["url"])
-    if d.bozo and isinstance(d.bozo_exception, URLError):
-        return -1  # Bad URL
+
+    d = feedparser.parse(f_cfg["url"], **kwargs)
+
+    if d.bozo and isinstance(d.bozo_exception, (URLError, SAXParseException)):
+        return -1  # Bad URL / Bad feed
     for option in options_checked:
         if option in d:
             f_cfg[option] = getattr(d, option)
@@ -78,7 +81,7 @@ def display_status(feed_name, sts):
         404: "Feed not found",
         410: "Feed gone",
         429: "Too many requests",
-        -1: "Bad feed URL",
+        -1: "Bad feed/URL",
     }
     print(f"{feed_name}: {status_map.get(sts, 'Unknown')} ({sts})")
 
@@ -97,6 +100,9 @@ def display_short_status(res_array):
 
 ARGS = parse_args()
 CFG = read_config(ARGS.config)
+if CFG is None:
+    print("Issue with the configuration file. Exiting.", file=sys.stderr)
+    sys.exit(-1)
 
 if ARGS.list:
     for feed_cfg in CFG:
