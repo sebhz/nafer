@@ -43,11 +43,12 @@ def parse_args():
 
 def handle_feed(feed_name, cfg):
     """Check feed and status"""
+    options_checked = ("modified", "etag")
     f_cfg = cfg[feed_name]
     if not "url" in f_cfg:
         return 410  # Return "gone"
     kwargs = {}
-    for option in ("modified", "etag"):
+    for option in options_checked:
         if f_cfg.get(option) is not None:
             kwargs[option] = f_cfg.get(option)
     if kwargs:
@@ -56,10 +57,9 @@ def handle_feed(feed_name, cfg):
         d = feedparser.parse(f_cfg["url"])
     if d.bozo and isinstance(d.bozo_exception, URLError):
         return -1  # Bad URL
-    if "modified" in d:
-        f_cfg["modified"] = d.modified
-    if "etag" in d:
-        f_cfg["etag"] = d.etag
+    for option in options_checked:
+        if option in d:
+            f_cfg[option] = getattr(d, option)
     if d.status == 301:  # Permanent redirect - update URL
         if "href" in d:
             f_cfg["url"] = d.href
