@@ -31,12 +31,13 @@ def write_config(config_name, config):
 def parse_args():
     """Basic argument parser"""
     parser = argparse.ArgumentParser(description="News feed basic alarm")
-    parser.add_argument("--short", help="short output", action="store_true")
+    parser.add_argument("-s", "--short", help="short output", action="store_true")
     parser.add_argument(
-        "--config", help="configuration file", default=CONFIG_DEFAULT, type=str
+        "-c", "--config", help="configuration file", default=CONFIG_DEFAULT, type=str
     )
     parser.add_argument("--list", help="list feeds", action="store_true")
     parser.add_argument(
+        "-u",
         "--uncached",
         help="retrieve state. Do not used cached info",
         action="store_true",
@@ -94,9 +95,7 @@ def display_status(feed_name, sts):
         429: "Too many requests",
         -1: "Bad feed/URL",
     }
-    print(
-        f"{feed_name}: {status_map.get(sts, 'Unknown')} ({sts})"
-    )
+    print(f"{feed_name}: {status_map.get(sts, 'Unknown')} ({sts})")
 
 
 def display_short_status(res_array):
