@@ -58,7 +58,7 @@ def handle_feed(feed_name, cfg, args):
     if "cached" in f_cfg and not args.uncached:
         return f_cfg["cached"]
     if not "url" in f_cfg:
-        f_cfg["cached"] = 410  # "gone"
+        return 410  # "gone" - nothing to try and retrieve
     kwargs = {}
     for option in options_checked:
         if f_cfg.get(option) is not None:
@@ -77,11 +77,9 @@ def handle_feed(feed_name, cfg, args):
                 f_cfg["url"] = d.href
         if d.status == 410:  # Feed is gone - delete URL
             f_cfg.pop("url", None)
-        f_cfg["cached"] = d.status
+        f_cfg["cached"] = d.status  # Assumes that d.status exists...
     cfg[feed_name] = f_cfg
-    if "status" in d:
-        return d.status
-    return -1
+    return f_cfg["cached"]
 
 
 def display_status(feed_name, sts):
