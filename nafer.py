@@ -37,6 +37,11 @@ def parse_args():
     )
     parser.add_argument("--list", help="list feeds", action="store_true")
     parser.add_argument(
+        "--uncached",
+        help="retrieve state. Do not used cached info",
+        action="store_true",
+    )
+    parser.add_argument(
         "feeds",
         nargs="*",
         help="feeds to check. Optional. If not provided checks all feeds",
@@ -45,12 +50,14 @@ def parse_args():
     return _args
 
 
-def handle_feed(feed_name, cfg):
+def handle_feed(feed_name, cfg, args):
     """Check feed and status"""
     options_checked = ("modified", "etag")
     f_cfg = cfg[feed_name]
+    if "cached" in f_cfg and not args.uncached:
+        return f_cfg["cached"]
     if not "url" in f_cfg:
-        return 410  # Return "gone"
+        f_cfg["cached"] = 410  # "gone"
     kwargs = {}
     for option in options_checked:
         if f_cfg.get(option) is not None:
@@ -59,17 +66,21 @@ def handle_feed(feed_name, cfg):
     d = feedparser.parse(f_cfg["url"], **kwargs)
 
     if d.bozo and isinstance(d.bozo_exception, (URLError, SAXParseException)):
-        return -1  # Bad URL / Bad feed
-    for option in options_checked:
-        if option in d:
-            f_cfg[option] = getattr(d, option)
-    if d.status == 301:  # Permanent redirect - update URL
-        if "href" in d:
-            f_cfg["url"] = d.href
-    if d.status == 410:  # Feed is gone - delete URL
-        f_cfg.pop("url", None)
+        f_cfg["cached"] = -1  # Bad URL / Bad feed
+    else:
+        for option in options_checked:
+            if option in d:
+                f_cfg[option] = getattr(d, option)
+        if d.status == 301:  # Permanent redirect - update URL
+            if "href" in d:
+                f_cfg["url"] = d.href
+        if d.status == 410:  # Feed is gone - delete URL
+            f_cfg.pop("url", None)
+        f_cfg["cached"] = d.status
     cfg[feed_name] = f_cfg
-    return d.status
+    if "status" in d:
+        return d.status
+    return -1
 
 
 def display_status(feed_name, sts):
@@ -83,7 +94,9 @@ def display_status(feed_name, sts):
         429: "Too many requests",
         -1: "Bad feed/URL",
     }
-    print(f"{feed_name}: {status_map.get(sts, 'Unknown')} ({sts})")
+    print(
+        f"{feed_name}: {status_map.get(sts, 'Unknown')} ({sts})"
+    )
 
 
 def display_short_status(res_array):
@@ -101,7 +114,10 @@ def display_short_status(res_array):
 ARGS = parse_args()
 CFG = read_config(ARGS.config)
 if CFG is None:
-    print("Issue with the configuration file. Exiting.", file=sys.stderr)
+    if ARGS.short:
+        print("x/x!/x")
+    else:
+        print("Issue with the configuration file. Exiting.", file=sys.stderr)
     sys.exit(-1)
 
 if ARGS.list:
@@ -112,7 +128,7 @@ if ARGS.list:
 results = []
 for feed in CFG:
     if ARGS.feeds == [] or feed in ARGS.feeds:
-        status = handle_feed(feed, CFG)
+        status = handle_feed(feed, CFG, ARGS)
         results.append((feed, status))
 if ARGS.short:
     display_short_status(results)
