@@ -66,9 +66,7 @@ def handle_feed(feed_name, cfg, args):
 
     d = feedparser.parse(f_cfg["url"], **kwargs)
 
-    if d.bozo and isinstance(d.bozo_exception, (URLError, SAXParseException)):
-        f_cfg["cached"] = -1  # Bad URL / Bad feed
-    else:
+    if "status" in d:
         for option in options_checked:
             if option in d:
                 f_cfg[option] = getattr(d, option)
@@ -77,7 +75,12 @@ def handle_feed(feed_name, cfg, args):
                 f_cfg["url"] = d.href
         if d.status == 410:  # Feed is gone - delete URL
             f_cfg.pop("url", None)
-        f_cfg["cached"] = d.status  # Assumes that d.status exists...
+        f_cfg["cached"] = d.status
+    elif d.bozo and isinstance(d.bozo_exception, (URLError, SAXParseException)):
+        f_cfg["cached"] = -1  # Bad URL / Bad feed
+    else:
+        f_cfg["cached"] = -2  # What is this ?
+
     cfg[feed_name] = f_cfg
     return f_cfg["cached"]
 
