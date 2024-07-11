@@ -31,6 +31,7 @@ def write_config(config_name, config):
 def parse_args():
     """Basic argument parser"""
     parser = argparse.ArgumentParser(description="News feed basic alarm")
+    parser.add_argument("-d", "--debug", help="enable debug output", action="store_true")
     parser.add_argument("-s", "--short", help="short output", action="store_true")
     parser.add_argument(
         "-c", "--config", help="configuration file", default=CONFIG_DEFAULT, type=str
@@ -66,6 +67,8 @@ def handle_feed(feed_name, cfg, args):
 
     d = feedparser.parse(f_cfg["url"], **kwargs)
 
+    if args.debug:
+        print(d, file=sys.stderr)
     if "status" in d:
         for option in options_checked:
             if option in d:
@@ -95,6 +98,7 @@ def display_status(feed_name, sts):
         410: "Feed gone",
         429: "Too many requests",
         -1: "Bad feed/URL",
+        -2: "Unknown",
     }
     print(f"{feed_name}: {status_map.get(sts, 'Unknown')} ({sts})")
 
@@ -106,7 +110,7 @@ def display_short_status(res_array):
     for sts in sts_a:
         if sts in (200, 301):
             modified += 1
-        elif sts in (404, 410, 429, -1):
+        elif sts in (404, 410, 429, -1, -2):
             bad += 1
     print(f"{modified}/{bad}!/{len(res_array)}")
 
