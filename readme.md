@@ -8,14 +8,15 @@ and update it every 8 hours or so (or never).
 
 Configuration and feed state stored in the same file on disk.
 
-Does not know when or even if the articles were read. Just checks
-if there is something new since last time. If not, it will not report anything.
+Once a feed is checked, its status is cached (=written in the configuration file). Subsequent calls to the program will just return the cached status without polling the server. To force refresh, use the --uncached status.
 
 ## Arguments
 
     * --config <config_file>: use <config_file> as a configuration/state. Default is to use ${HOME}/.nfwba.
+    * --debug: display the content of the server response. Useful for debug.
     * --list: list all feed names in the configuration/state file.
-    * --short: short listing, for usage in a statusbar. Just outputs x/y!/z, with x the number of updated feeds, and y the numbers of bad feeds and z the total number of feeds.
+    * --short: short listing, for usage in a statusbar. Just outputs x/y!/z, with x the number of updated feeds, and y numbers of bad feeds and z the total number of feeds.
+    * --uncached: refresh the feeds status. Default is just to display the last retrieved state.
 
 If invoked with only a feed name, display the status of the feed.
 If invoked without arguments, display the status of all feeds.
