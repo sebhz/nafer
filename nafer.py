@@ -7,6 +7,7 @@ import os
 import sys
 from urllib.error import URLError
 from xml.sax import SAXParseException
+from datetime import datetime
 import feedparser
 
 CONFIG_DEFAULT = os.path.join(f"{os.environ['HOME']}", ".nafer")
@@ -31,7 +32,9 @@ def write_config(config_name, config):
 def parse_args():
     """Basic argument parser"""
     parser = argparse.ArgumentParser(description="News feed basic alarm")
-    parser.add_argument("-d", "--debug", help="enable debug output", action="store_true")
+    parser.add_argument(
+        "-d", "--debug", help="enable debug output", action="store_true"
+    )
     parser.add_argument("-s", "--short", help="short output", action="store_true")
     parser.add_argument(
         "-c", "--config", help="configuration file", default=CONFIG_DEFAULT, type=str
@@ -57,9 +60,11 @@ def handle_feed(feed_name, cfg, args):
     options_checked = ("modified", "etag")
     f_cfg = cfg[feed_name]
     if "cached" in f_cfg and not args.uncached:
-        return f_cfg["cached"]
+        return f_cfg
     if not "url" in f_cfg:
-        return 410  # "gone" - nothing to try and retrieve
+        f_cfg["cached"] = 410  # "gone" - nothing to try and retrieve
+        cfg[feed_name] = f_cfg
+        return f_cfg
     kwargs = {}
     for option in options_checked:
         if f_cfg.get(option) is not None:
@@ -85,10 +90,10 @@ def handle_feed(feed_name, cfg, args):
         f_cfg["cached"] = -2  # What is this ?
 
     cfg[feed_name] = f_cfg
-    return f_cfg["cached"]
+    return f_cfg
 
 
-def display_status(feed_name, sts):
+def display_feed(feed_name, f_cfg):
     """Display feed status"""
     status_map = {
         200: "Feed updated",
@@ -100,10 +105,17 @@ def display_status(feed_name, sts):
         -1: "Bad feed/URL",
         -2: "Unknown",
     }
-    print(f"{feed_name}: {status_map.get(sts, 'Unknown')} ({sts})")
+    sys.stdout.write(
+        f"{feed_name}: {status_map.get(f_cfg['cached'], 'Unknown')} ({f_cfg['cached']})"
+    )
+    if "modified" in f_cfg:
+        sys.stdout.write(
+            f" ({datetime.strptime(f_cfg['modified'], '%a, %d %b %Y %H:%M:%S %Z').strftime('%Y-%m-%d')})"
+        )
+    print("")
 
 
-def display_short_status(res_array):
+def display_feed_short(res_array):
     """Gather basic stats and display them"""
     (modified, bad) = (0, 0)
     sts_a = [_[1] for _ in res_array]
@@ -135,8 +147,8 @@ for feed in CFG:
         status = handle_feed(feed, CFG, ARGS)
         results.append((feed, status))
 if ARGS.short:
-    display_short_status(results)
+    display_feed_short(results)
 else:
-    for feed, status in results:
-        display_status(feed, status)
+    for feed, feed_cfg in results:
+        display_feed(feed, feed_cfg)
 write_config(ARGS.config, CFG)  # Let's hope we did not crash in between
