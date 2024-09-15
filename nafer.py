@@ -120,9 +120,10 @@ def display_feed_short(res_array):
     (modified, bad) = (0, 0)
     sts_a = [_[1] for _ in res_array]
     for sts in sts_a:
-        if sts in (200, 301):
+        cached = sts.get("cached")
+        if cached in (200, 301):
             modified += 1
-        elif sts in (404, 410, 429, -1, -2):
+        elif cached in (404, 410, 429, -1, -2):
             bad += 1
     print(f"{modified}/{bad}!/{len(res_array)}")
 
