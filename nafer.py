@@ -2,13 +2,15 @@
 """Very crude news feed alarm. Not a feed parser"""
 
 import argparse
+import datetime
 import json
 import os
 import sys
 from urllib.error import URLError
 from xml.sax import SAXParseException
-from datetime import datetime
+from zoneinfo import ZoneInfo
 import feedparser
+from prettytable import PrettyTable
 
 CONFIG_DEFAULT = os.path.join(f"{os.environ['HOME']}", ".nafer")
 
@@ -41,12 +43,6 @@ def parse_args():
     )
     parser.add_argument("--list", help="list feeds", action="store_true")
     parser.add_argument(
-        "-u",
-        "--uncached",
-        help="retrieve state. Do not used cached info",
-        action="store_true",
-    )
-    parser.add_argument(
         "feeds",
         nargs="*",
         help="feeds to check. Optional. If not provided checks all feeds",
@@ -59,12 +55,25 @@ def handle_feed(feed_name, cfg, args):
     """Check feed and status"""
     options_checked = ("modified", "etag")
     f_cfg = cfg[feed_name]
-    if "cached" in f_cfg and not args.uncached:
+
+    # The Last-Modified field of the feed uses GMT. Use also
+    # GMT TZ for our own dates, even they are are decorrelated
+    # from the Last-Modified field
+    now = datetime.datetime.now(tz=ZoneInfo("GMT"))
+
+    # Feed is gone, or we did not provide a URL
+    if not "url" in f_cfg or f_cfg.get("status", "") == "410":
         return f_cfg
-    if not "url" in f_cfg:
-        f_cfg["cached"] = 410  # "gone" - nothing to try and retrieve
-        cfg[feed_name] = f_cfg
-        return f_cfg
+
+    if "last_checked" in f_cfg:
+        last_checked = datetime.datetime.strptime(
+            f_cfg["last_checked"], "%a, %d %b %Y %H:%M:%S %Z"
+        )
+        last_checked = last_checked.replace(tzinfo=ZoneInfo("GMT"))
+        # No need to poll more than once a day
+        if (now - last_checked).days < 1:
+            return f_cfg
+
     kwargs = {}
     for option in options_checked:
         if f_cfg.get(option) is not None:
@@ -83,17 +92,25 @@ def handle_feed(feed_name, cfg, args):
                 f_cfg["url"] = d.href
         if d.status == 410:  # Feed is gone - delete URL
             f_cfg.pop("url", None)
-        f_cfg["cached"] = d.status
+        f_cfg["status"] = d.status
     elif d.bozo and isinstance(d.bozo_exception, (URLError, SAXParseException)):
-        f_cfg["cached"] = -1  # Bad URL / Bad feed
+        f_cfg["status"] = -1  # Bad URL / Bad feed
     else:
-        f_cfg["cached"] = -2  # What is this ?
+        f_cfg["status"] = -2  # What is this ?
 
+    f_cfg["last_checked"] = now.strftime("%a, %d %b %Y %H:%M:%S %Z")
     cfg[feed_name] = f_cfg
     return f_cfg
 
 
-def display_feed(feed_name, f_cfg):
+def extract_date(dte):
+    """Extract datestring from datetime"""
+    return datetime.datetime.strptime(dte, "%a, %d %b %Y %H:%M:%S %Z").strftime(
+        "%Y-%m-%d"
+    )
+
+
+def display_feeds(feeds):
     """Display feed status"""
     status_map = {
         200: "Feed updated",
@@ -105,25 +122,42 @@ def display_feed(feed_name, f_cfg):
         -1: "Bad feed/URL",
         -2: "Unknown",
     }
-    sys.stdout.write(
-        f"{feed_name}: {status_map.get(f_cfg['cached'], 'Unknown')} ({f_cfg['cached']})"
-    )
-    if "modified" in f_cfg:
-        sys.stdout.write(
-            f" ({datetime.strptime(f_cfg['modified'], '%a, %d %b %Y %H:%M:%S %Z').strftime('%Y-%m-%d')})"
+    table = PrettyTable()
+    table.field_names = [
+        "Feed",
+        "Status code",
+        "Status",
+        "Last modified",
+        "Last checked",
+    ]
+
+    for feed_name, f_cfg in feeds:
+        modded, checked = "-", "-"
+        if "modified" in f_cfg:
+            modded = extract_date(f_cfg["modified"])
+        if "last_checked" in f_cfg:
+            checked = extract_date(f_cfg["last_checked"])
+        table.add_row(
+            [
+                feed_name,
+                f_cfg["status"],
+                status_map.get(f_cfg["status"], "Unknown"),
+                modded,
+                checked,
+            ]
         )
-    print("")
+    print(table)
 
 
-def display_feed_short(res_array):
+def display_feeds_short(res_array):
     """Gather basic stats and display them"""
     (modified, bad) = (0, 0)
     sts_a = [_[1] for _ in res_array]
     for sts in sts_a:
-        cached = sts.get("cached")
-        if cached in (200, 301):
+        status = sts.get("status")
+        if status in (200, 301):
             modified += 1
-        elif cached in (404, 410, 429, -1, -2):
+        elif status in (404, 410, 429, -1, -2):
             bad += 1
     print(f"{modified}/{bad}!/{len(res_array)}")
 
@@ -143,13 +177,15 @@ if ARGS.list:
     sys.exit(0)
 
 results = []
+
+
 for feed in CFG:
     if ARGS.feeds == [] or feed in ARGS.feeds:
-        status = handle_feed(feed, CFG, ARGS)
-        results.append((feed, status))
+        feed_cfg = handle_feed(feed, CFG, ARGS)
+        results.append((feed, feed_cfg))
 if ARGS.short:
-    display_feed_short(results)
+    display_feeds_short(results)
 else:
-    for feed, feed_cfg in results:
-        display_feed(feed, feed_cfg)
+    display_feeds(results)
+
 write_config(ARGS.config, CFG)  # Let's hope we did not crash in between
