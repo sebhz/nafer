@@ -56,23 +56,23 @@ def handle_feed(feed_name, cfg, args):
     options_checked = ("modified", "etag")
     f_cfg = cfg[feed_name]
 
-    # The Last-Modified field of the feed uses GMT. Use also
-    # GMT TZ for our own dates, even they are are decorrelated
-    # from the Last-Modified field
-    now = datetime.datetime.now(tz=ZoneInfo("GMT"))
-
     # Feed is gone, or we did not provide a URL
     if not "url" in f_cfg or f_cfg.get("status", "") == "410":
         return f_cfg
 
+    # The Last-Modified field of the feed uses GMT timezone.
+    # (this is the spec).
+    # Use also GMT TZ for our own dates for consistency, even
+    # they are are decorrelated from the Last-Modified field
+    now = datetime.datetime.now(tz=ZoneInfo("GMT"))
     if "last_checked" in f_cfg:
         last_checked = datetime.datetime.strptime(
             f_cfg["last_checked"], "%a, %d %b %Y %H:%M:%S %Z"
-        )
-        last_checked = last_checked.replace(tzinfo=ZoneInfo("GMT"))
+        ).replace(tzinfo=ZoneInfo("GMT"))
         # No need to poll more than once a day
         if (now - last_checked).days < 1:
             return f_cfg
+    f_cfg["last_checked"] = now.strftime("%a, %d %b %Y %H:%M:%S %Z")
 
     kwargs = {}
     for option in options_checked:
@@ -98,7 +98,6 @@ def handle_feed(feed_name, cfg, args):
     else:
         f_cfg["status"] = -2  # What is this ?
 
-    f_cfg["last_checked"] = now.strftime("%a, %d %b %Y %H:%M:%S %Z")
     cfg[feed_name] = f_cfg
     return f_cfg
 
@@ -128,22 +127,18 @@ def display_feeds(feeds):
         "Status code",
         "Status",
         "Last modified",
-        "Last checked",
     ]
 
     for feed_name, f_cfg in feeds:
-        modded, checked = "-", "-"
+        modded = "-"
         if "modified" in f_cfg:
             modded = extract_date(f_cfg["modified"])
-        if "last_checked" in f_cfg:
-            checked = extract_date(f_cfg["last_checked"])
         table.add_row(
             [
                 feed_name,
                 f_cfg["status"],
                 status_map.get(f_cfg["status"], "Unknown"),
                 modded,
-                checked,
             ]
         )
     print(table)
